@@ -1,2 +1,5 @@
 .idea
 .venv
+alarick_mail/test.py
+alarick_mail/fullchain.pem
+alarick_mail/privkey.pem
