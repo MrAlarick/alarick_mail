@@ -1,9 +1,8 @@
 aiosmtpd
 dnspython
 bcrypt
-#databases[sqlite]
-#databases[mysql]
-#databases[postgresql]
 sqlalchemy
 pymysql
 psycopg[binary]
+aiofiles
+uuid7
