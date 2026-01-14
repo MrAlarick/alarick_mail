@@ -41,7 +41,7 @@ class Queue:
             return f.read()
 
     async def list(self, folder: str) -> Generator[dict[str, dict[str, str]], None, None]:
-        return {uuid: await self.get_md(folder, uuid) for uuid in await aiofiles.os.listdir(self.dir / Path(folder)) if not filename.startswith("~")}
+        return {uuid: await self.get_md(folder, uuid) for uuid in await aiofiles.os.listdir(self.dir / Path(folder)) if not uuid.startswith("~")}
 
     async def remove(self, folder: str, uuid: str) -> None:
         path = self.dir / Path(folder)
@@ -58,7 +58,7 @@ class Queue:
             md_dict[key] = value
         for key, value in new_metadata.items():
             md_dict[key] = value
-        md = "\n".join(f"{key}={value}" for key, value in metadata.items())
+        md = "\n".join(f"{key}={value}" for key, value in md_dict.items())
         async with aiofiles.open(path, "w") as f:
             await f.write(md)
 
@@ -173,7 +173,7 @@ async def retry_processor(queue: Queue, stop_event: asyncio.Event) -> None:
     while not stop_event.is_set():
         for uuid, md in asyncio.run(queue.list("retry")):
             hosts = await get_mx(md["recipients"])
-            if hosts is none:
+            if hosts is None:
                 queue.remove("retry", uuid)
             else:
                 retry = False
@@ -229,9 +229,9 @@ async def main() -> None:
             incoming_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             incoming_ctx.load_cert_chain(certfile=smtp.get("cert_file"), keyfile=smtp.get("key_file"))
             if tls_type == "starttls":
-                incoming_tls = {"tls_context": tls_ctx, "require_starttls": True}
+                incoming_tls = {"tls_context": incoming_ctx, "require_starttls": True}
             elif tls_type == "implicit":
-                incoming_tls = {"ssl_context": tls_ctx}
+                incoming_tls = {"ssl_context": incoming_ctx}
 
         tls_type = smtp.get("submission", {}).get("tls", "none")
         if tls_type == "none":
@@ -240,9 +240,9 @@ async def main() -> None:
             submission_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             submission_ctx.load_cert_chain(certfile=smtp.get("cert_file"), keyfile=smtp.get("key_file"))
             if tls_type == "starttls":
-                submission_tls = {"tls_context": tls_ctx, "require_starttls": True}
+                submission_tls = {"tls_context": submission_ctx, "require_starttls": True}
             elif tls_type == "implicit":
-                submission_tls = {"ssl_context": tls_ctx}
+                submission_tls = {"ssl_context": submission_ctx}
     else:
         incoming_tls = {}
         submission_tls = {}
@@ -264,12 +264,11 @@ async def main() -> None:
     stop_event = asyncio.Event()
     tasks = []
     try:
-        incoming.start()
         tasks.append(asyncio.create_task(incoming_processor(queue=queue, stop_event=stop_event)))
-        submission.start()
         tasks.append(asyncio.create_task(relay_processor(queue=queue, stop_event=stop_event)))
         tasks.append(asyncio.create_task(retry_processor(queue=queue, stop_event=stop_event)))
-        tasks.append(asyncio.create_task(bounce_processor(queue=queue, stop_event=stop_event)))
+        incoming.start()
+        submission.start()
         await asyncio.Event().wait()
     finally:
         incoming.stop()
